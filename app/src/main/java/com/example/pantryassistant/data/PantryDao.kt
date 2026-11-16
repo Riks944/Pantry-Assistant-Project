@@ -16,6 +16,10 @@ interface PantryDao {
     @Query("SELECT * FROM pantry_items WHERE id = :id")
     suspend fun getById(id: Long): PantryItem?
 
+    /** Finds a pantry item by name, ignoring upper/lower case ("milk" matches "Milk"). */
+    @Query("SELECT * FROM pantry_items WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun getByName(name: String): PantryItem?
+
     @Query("SELECT * FROM pantry_items WHERE markedLow = 1 OR quantity <= lowStockThreshold ORDER BY name COLLATE NOCASE")
     suspend fun getLowStock(): List<PantryItem>
 

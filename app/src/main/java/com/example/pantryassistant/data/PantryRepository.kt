@@ -58,20 +58,37 @@ class PantryRepository(private val db: PantryDatabase) {
     suspend fun removeShoppingItem(item: ShoppingItem) = shoppingDao.delete(item)
 
     /**
-     * Moves every purchased entry back into the pantry: linked items get their
-     * quantity increased and their low mark cleared; the entries are removed.
+     * Moves every purchased entry back into the pantry and removes it from the list.
+     *
+     * - Entry linked to a pantry item → that item's quantity goes up.
+     * - Extra item typed on the shopping screen (no link) → matched to a pantry
+     *   item with the same name (ignoring upper/lower case). If none exists,
+     *   a new pantry item is created in the "Other" category.
      */
     suspend fun restockPurchased(): Int = db.withTransaction {
         val purchased = shoppingDao.getPurchased()
         purchased.forEach { entry ->
-            val pantryId = entry.pantryItemId
             shoppingDao.delete(entry)
-            if (pantryId != null) {
-                pantryDao.getById(pantryId)?.let { p ->
-                    val restocked = p.copy(quantity = p.quantity + entry.quantityToBuy, markedLow = false)
-                    pantryDao.update(restocked)
-                    syncShoppingList(restocked)
-                }
+            val pantryItem = entry.pantryItemId?.let { pantryDao.getById(it) }
+                ?: pantryDao.getByName(entry.name.trim())
+            if (pantryItem != null) {
+                val restocked = pantryItem.copy(
+                    quantity = pantryItem.quantity + entry.quantityToBuy,
+                    markedLow = false,
+                )
+                pantryDao.update(restocked)
+                syncShoppingList(restocked)
+            } else {
+                val newItem = PantryItem(
+                    name = entry.name.trim(),
+                    quantity = entry.quantityToBuy,
+                    category = Category.OTHER,
+                    // Threshold 0 = only "low" when it runs out, so a freshly bought
+                    // item doesn't jump straight back onto the shopping list.
+                    lowStockThreshold = 0,
+                )
+                val id = pantryDao.insert(newItem)
+                syncShoppingList(newItem.copy(id = id))
             }
         }
         purchased.size
