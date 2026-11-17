@@ -132,7 +132,7 @@ class PantryViewModel(private val repository: PantryRepository) : ViewModel() {
     fun addManualShoppingItem(name: String, qty: Int) = viewModelScope.launch {
         if (name.isNotBlank()) repository.addManualShoppingItem(name, qty)
     }
-    fun restockPurchased(onDone: (Int) -> Unit) = viewModelScope.launch {
+    fun restockPurchased(onDone: (List<String>) -> Unit) = viewModelScope.launch {
         onDone(repository.restockPurchased())
     }
 
