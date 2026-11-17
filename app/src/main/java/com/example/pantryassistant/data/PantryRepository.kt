@@ -2,6 +2,7 @@ package com.example.pantryassistant.data
 
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
+import java.util.Locale
 
 /**
  * Single source of truth for the UI and the background worker.
@@ -62,15 +63,20 @@ class PantryRepository(private val db: PantryDatabase) {
      *
      * - Entry linked to a pantry item → that item's quantity goes up.
      * - Extra item typed on the shopping screen (no link) → matched to a pantry
-     *   item with the same name (ignoring upper/lower case). If none exists,
+     *   item with the same name. Upper/lower case and extra spaces are ignored,
+     *   so "milk", "Milk" and " MILK " all match "Milk". If none exists,
      *   a new pantry item is created in the "Other" category.
+     *
+     * Returns one line per entry describing what happened, e.g. "Milk: 1 → 4",
+     * which the shopping screen shows in a snackbar.
      */
-    suspend fun restockPurchased(): Int = db.withTransaction {
+    suspend fun restockPurchased(): List<String> = db.withTransaction {
+        val results = mutableListOf<String>()
         val purchased = shoppingDao.getPurchased()
         purchased.forEach { entry ->
             shoppingDao.delete(entry)
             val pantryItem = entry.pantryItemId?.let { pantryDao.getById(it) }
-                ?: pantryDao.getByName(entry.name.trim())
+                ?: findByName(entry.name)
             if (pantryItem != null) {
                 val restocked = pantryItem.copy(
                     quantity = pantryItem.quantity + entry.quantityToBuy,
@@ -78,6 +84,7 @@ class PantryRepository(private val db: PantryDatabase) {
                 )
                 pantryDao.update(restocked)
                 syncShoppingList(restocked)
+                results += "${restocked.name}: ${pantryItem.quantity} → ${restocked.quantity}"
             } else {
                 val newItem = PantryItem(
                     name = entry.name.trim(),
@@ -89,10 +96,26 @@ class PantryRepository(private val db: PantryDatabase) {
                 )
                 val id = pantryDao.insert(newItem)
                 syncShoppingList(newItem.copy(id = id))
+                results += "New pantry item: ${newItem.name} (${newItem.quantity})"
             }
         }
-        purchased.size
+        results
     }
+
+    /**
+     * Finds the pantry item an extra shopping item refers to. Tries the SQL
+     * lookup first, then compares normalized names in Kotlin, which also
+     * ignores extra spaces and non-English upper/lower case.
+     */
+    private suspend fun findByName(name: String): PantryItem? {
+        val wanted = normalize(name)
+        if (wanted.isEmpty()) return null
+        return pantryDao.getByName(name.trim())
+            ?: pantryDao.getAll().firstOrNull { normalize(it.name) == wanted }
+    }
+
+    private fun normalize(name: String): String =
+        name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
 
     private suspend fun syncShoppingList(item: PantryItem) {
         val existing = shoppingDao.getForPantryItem(item.id)

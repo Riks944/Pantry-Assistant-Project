@@ -20,6 +20,9 @@ interface PantryDao {
     @Query("SELECT * FROM pantry_items WHERE name = :name COLLATE NOCASE LIMIT 1")
     suspend fun getByName(name: String): PantryItem?
 
+    @Query("SELECT * FROM pantry_items")
+    suspend fun getAll(): List<PantryItem>
+
     @Query("SELECT * FROM pantry_items WHERE markedLow = 1 OR quantity <= lowStockThreshold ORDER BY name COLLATE NOCASE")
     suspend fun getLowStock(): List<PantryItem>
 

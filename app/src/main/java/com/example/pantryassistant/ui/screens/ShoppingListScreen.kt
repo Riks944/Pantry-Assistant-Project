@@ -51,7 +51,7 @@ fun ShoppingListScreen(
     onTogglePurchased: (ShoppingItem) -> Unit,
     onRemove: (ShoppingItem) -> Unit,
     onAddManual: (String, Int) -> Unit,
-    onRestock: (onDone: (Int) -> Unit) -> Unit,
+    onRestock: (onDone: (List<String>) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHost = remember { SnackbarHostState() }
@@ -84,8 +84,9 @@ fun ShoppingListScreen(
 
             Button(
                 onClick = {
-                    onRestock { count ->
-                        scope.launch { snackbarHost.showSnackbar("Restocked $count item(s) into the pantry") }
+                    onRestock { results ->
+                        // Shows what happened to each item, e.g. "Milk: 1 → 4".
+                        scope.launch { snackbarHost.showSnackbar(results.joinToString("\n")) }
                     }
                 },
                 enabled = purchasedCount > 0,
